@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
   schedule:
-    - cron: 10 16 * * *
+    - cron: '10 16 * * *'   # 每天 16:10 UTC 运行
+    - cron: '0 0 1 * *'     # 每月 1 号 00:00 额外 keepalive 提交，防止失活
 
 jobs:
   run:
@@ -14,8 +15,29 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-      - run: npm ci
-      - run: npm run main
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run main script
+        run: npm run main
         env:
           GLADOS: ${{ secrets.GLADOS }}
           NOTIFY: ${{ secrets.NOTIFY }}
+
+  # 🔁 每月一次的 keepalive job，防止仓库被 GitHub 自动禁用
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Keep workflow active
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "Last keepalive: $(date)" > .github/last-keepalive.txt
+          git add .github/last-keepalive.txt
+          git commit -m "chore: keep workflow active $(date '+%Y-%m-%d')" || echo "No changes to commit"
+          git push || echo "No push necessary"
